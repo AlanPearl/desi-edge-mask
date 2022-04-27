@@ -4,19 +4,55 @@ import cv2 as cv
 
 
 class DesiEdgeMasker:
-    def __init__(self, ra, dec, bins_per_dim=10_000,
-                 edge_buffer=0.285, ra_zero=298,
-                 fill_hole_radius_pixels=50,
+    def __init__(self, ra, dec, edge_buffer=0.285,
+                 bins_per_dim=4000, ra_zero=298,
+                 fill_hole_radius_pixels=20,
                  ra_lims=None, dec_lims=None,
-                 make_plots=False):
+                 make_debugging_plots=False):
+        """
+        Given the ra/dec of spatial data, this object can mask objects
+        near the edge of the data.
+
+        Note: Runtime and memory increase quadratically with `bins_per_dim`
+
+        Tip: If this algorithm is finding edges that shouldn't be
+        there in the middle of your data, either increase `bins_per_dim`
+        or decrease `fill_hole_radius_pixels` (and vice versa if it
+        connects data which should be unconnected)
+            If you simply want to increase resolution, then increase
+        `bins_per_dim` AND `fill_hole_radius_pixels` proportionally.
+
+        :param ra: np.ndarray[float]
+            Right ascension of the data (in degrees)
+        :param dec: np.ndarray[float]
+            Declination of the data (in degrees)
+        :param edge_buffer: float
+            Distance from edge to mask
+        :param bins_per_dim: int | tuple[int]
+            Number of pixels in ra/dec to bin data into
+        :param ra_zero: float
+            RA zeropoint (this should never go through data)
+            TODO: calculate a good value automatically by default?
+        :param fill_hole_radius_pixels: int | tuple[int]
+            ~Number of pixels to allow between data without an edge
+            between them
+        :param ra_lims: Optional[tuple[float]]
+            Bounds on RA (reasonable defaults inferred from data)
+        :param dec_lims: Optional[tuple[float]]
+            Bounds on dec (reasonable defaults inferred from data)
+        :param make_debugging_plots: bool
+            Set to true to see plots of each step for debugging
+        """
         # Parse input variables
         # =====================
         ra, dec = np.asarray(ra), np.asarray(dec)
         ra_eq = (ra - ra_zero) % 360 * np.cos(np.pi / 180 * dec)
 
+        # Convert scalar input into a 2-tuple
         if len(np.shape(bins_per_dim)) < 1:
-            # Convert scalar input into a 2-tuple
-            bins_per_dim = (bins_per_dim, bins_per_dim)
+            bins_per_dim = (bins_per_dim,) * 2
+        if len(np.shape(fill_hole_radius_pixels)) < 1:
+            fill_hole_radius_pixels = (fill_hole_radius_pixels,) * 2
 
         if ra_lims is None:
             # ra_eq_lims = (-3, 325)
@@ -31,7 +67,7 @@ class DesiEdgeMasker:
 
         self.ra_zero = ra_zero
         self.ra_eq_lims, self.dec_lims = ra_eq_lims, dec_lims
-        self.make_plots = make_plots
+        self.make_debugging_plots = make_debugging_plots
 
         # Use these input variables to alter Misha's code below
         # =====================================================
@@ -55,7 +91,7 @@ class DesiEdgeMasker:
         mask = np.isfinite(ra) & np.isfinite(dec)
         ra, dec = ra[mask], dec[mask]
 
-        if make_plots:
+        if make_debugging_plots:
             # Create "2-D histogram" of footprint
             bins = (np.linspace(np.min(dec),
                                 np.max(dec), 1000),
@@ -97,7 +133,7 @@ class DesiEdgeMasker:
 
         test[circle_mask] = 1
     
-        if make_plots:
+        if make_debugging_plots:
             plt.imshow(test)
             plt.show()
 
@@ -108,7 +144,7 @@ class DesiEdgeMasker:
         kernel = test2.astype("uint8")
         closing = cv.morphologyEx(h0, cv.MORPH_CLOSE, kernel)
 
-        if make_plots:
+        if make_debugging_plots:
             plt.figure(figsize=(12, 12))
             plt.imshow(closing)
             plt.gca().invert_xaxis()
@@ -119,15 +155,16 @@ class DesiEdgeMasker:
         kernel2 = test.astype("uint8")
         self.eroded = cv.erode(closing, kernel2) != 0
     
-        if make_plots:
+        if make_debugging_plots:
             plt.figure(figsize=(12, 12))
             plt.imshow(self.eroded)
             # plt.plot(1000, 100, 'o')
             plt.gca().invert_xaxis()
             plt.gca().invert_yaxis()
 
-    def get_edge_mask(self, ra, dec, make_plots=None, invert=False):
-        make_plots = self.make_plots if make_plots is None else make_plots
+    def get_edge_mask(self, ra, dec, make_debugging_plots=None, invert=False):
+        if make_debugging_plots is None:
+            make_debugging_plots = self.make_debugging_plots
         ra_eq = (ra - self.ra_zero) % 360 * np.cos(np.pi / 180 * dec)
         # Convert RA/DEC to histogram indices
         ra_indices = np.round((ra_eq - self.ra_eq_lims[0]) / self.y_scale).astype(int)
@@ -136,7 +173,7 @@ class DesiEdgeMasker:
         # Apply mask
         edge_mask = self.eroded[dec_indices, ra_indices]
 
-        if make_plots:
+        if make_debugging_plots:
             # Sanity check
             ra2, dec2 = ra[edge_mask == 0], dec[edge_mask == 0]
             h_uneq2, xedges, yedges = np.histogram2d(dec2, (ra2 - self.ra_zero) % 360, bins=(
