@@ -33,7 +33,7 @@ class DesiEdgeMasker:
         :param ra_zero: float
             RA zeropoint (this should never go through data)
             TODO: calculate a good value automatically by default?
-        :param fill_hole_radius_pixels: int | tuple[int]
+        :param fill_hole_radius_pixels: int
             ~Number of pixels to allow between data without an edge
             between them
         :param ra_lims: Optional[tuple[float]]
@@ -51,8 +51,6 @@ class DesiEdgeMasker:
         # Convert scalar input into a 2-tuple
         if len(np.shape(bins_per_dim)) < 1:
             bins_per_dim = (bins_per_dim,) * 2
-        if len(np.shape(fill_hole_radius_pixels)) < 1:
-            fill_hole_radius_pixels = (fill_hole_radius_pixels,) * 2
 
         if ra_lims is None:
             # ra_eq_lims = (-3, 325)
