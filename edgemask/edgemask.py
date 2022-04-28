@@ -5,7 +5,7 @@ import cv2 as cv
 
 class DesiEdgeMasker:
     def __init__(self, ra, dec, edge_buffer=0.285,
-                 bins_per_dim=4000, ra_zero=298,
+                 bins_per_dim=2000, ra_zero=298,
                  fill_hole_radius_pixels=20,
                  ra_lims=None, dec_lims=None,
                  make_debugging_plots=False):
